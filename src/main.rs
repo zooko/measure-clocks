@@ -340,7 +340,7 @@ pub mod plat_unixes {
     }
 
     pub fn increment_system_time() {
-        use libc::{gettimeofday, settimeofday, timeval, timezone};
+        use libc::{gettimeofday, settimeofday, timeval};
 
         // Read current time
         let mut tv = timeval { tv_sec: 0, tv_usec: 0 };
@@ -350,11 +350,12 @@ pub mod plat_unixes {
             }
         }
 
+        //eprintln!("gtod: {} {}", tv.tv_sec, tv.tv_usec);
         tv.tv_sec += 1;
 
         // Set new time
         unsafe {
-            if settimeofday(&tv as *const timeval, std::ptr::null::<timezone>()) != 0 {
+            if settimeofday(&tv as *const timeval, std::ptr::null()) != 0 {
                 eprintln!("You have to give this process super-user/admin privs for it to be able to set (jump) the system clock.");
                 eprintln!("{}", Error::last_os_error());
                 panic!();
@@ -543,22 +544,12 @@ fn get_iters() -> u64 {
     DEFAULT_ITERS
 }
 
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+fn jump_clock_ahead_thread() {
+    sleep(D);
 
-fn jump_clock_ahead_thread(should_exit: Arc<AtomicBool>) {
-    // println!("Worker thread started");
-
-    // let mut iteration = 0;
-    while !should_exit.load(Ordering::Relaxed) {
-        // Do the actual work here
-        // iteration += 1;
-        // println!("Worker iteration {iteration}");
-
+    loop {
         jump_clock_forward_1_sec();
     }
-
-    // println!("Worker thread exiting gracefully");
 }
 
 use std::env;
@@ -570,9 +561,11 @@ fn main() {
 
 #[cfg(unix)]
     {
-        use crate::plat_unixes::{libc, libc_gettime_clock, libc_gettime_clock_calibrate};
+    use crate::plat_unixes::{libc, libc_gettime_clock, libc_gettime_clock_calibrate};
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_THREAD_CPUTIME_ID), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC), false);
+    add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_REALTIME), false);
+    add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_BOOTTIME), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
     }
 #[cfg(target_vendor = "apple")]
@@ -612,19 +605,13 @@ fn main() {
         }
     }
 
-    let should_exit = Arc::new(AtomicBool::new(false));
-
     if args.contains(&"--clockjumpahead".to_string()) {
-        let should_exit_clone = Arc::clone(&should_exit);
-
         thread::spawn(|| {
-            jump_clock_ahead_thread(should_exit_clone);
+            jump_clock_ahead_thread();
         });
     }
 
     for handle in clockmeasurementhandles {
         handle.join().unwrap();
     }
-
-    should_exit.store(true, Ordering::Relaxed);
 }
