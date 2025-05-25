@@ -71,9 +71,18 @@ fn libc_gettime_uptime_raw() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_UPTIME_RAW)
 }
     
-use mach_sys::mach_time::mach_absolute_time;
+use mach_sys::mach_time::{mach_absolute_time, mach_timebase_info};
+use mach_sys::kern_return::KERN_SUCCESS;
 fn mat() -> Vec<u128> {
     eprintln!("mach_absolute_time");
+
+    let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
+    let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
+    assert_eq!(retval, KERN_SUCCESS);
+    let mtt2 = unsafe { mtt1.assume_init() };
+
+    eprintln!("mach_timebase_info: {mtt2:?}");
+
     let mut durations = Vec::with_capacity(NUM_ARGS as usize);
     let mut i = 0;
     
@@ -81,14 +90,14 @@ fn mat() -> Vec<u128> {
         let t1 = unsafe { mach_absolute_time() };
         let t2 = unsafe { mach_absolute_time() };
 
-        durations.push((t2 - t1) as u128);
+        let nanos = ((t2 - t1) * mtt2.numer as u64) / mtt2.denom as u64;
+        durations.push(nanos as u128);
 
         i += 1;
     }
 
     durations
 }
-    
 
 use thousands::Separable;
 fn stats<F>(func: F)
