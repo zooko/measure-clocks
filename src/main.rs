@@ -26,6 +26,32 @@ fn instant() -> Vec<u128> {
 
 use std::mem::MaybeUninit;
 
+use libc::clockid_t;
+unsafe extern "C" {
+    fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
+}
+
+
+fn measure_clock_gettime_nsec_np() -> Vec<u128> {
+    eprintln!("clock_gettime_nsec_np");
+
+    let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+    let mut i = 0;
+    
+    while i < NUM_ARGS {
+        let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+        let now = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+
+        let dur = now - prev;
+            
+        durations.push(dur as u128);
+
+        i += 1;
+    }
+
+    durations
+}
+    
 fn libc_gettime_clock(clock: u32) -> Vec<u128> {
     let mut durations = Vec::with_capacity(NUM_ARGS as usize);
     let mut i = 0;
@@ -140,4 +166,6 @@ fn main() {
     stats(libc_gettime_uptime_raw);
     eprintln!();
     stats(mat);
+    eprintln!();
+    stats(measure_clock_gettime_nsec_np);
 }
