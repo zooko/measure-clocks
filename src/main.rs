@@ -15,7 +15,8 @@ fn instant() -> Vec<u128> {
 
     while i < NUM_ARGS {
         let inst = Instant::now();
-        durations.push(inst.elapsed().as_nanos());
+        let d = inst.elapsed();
+        durations.push(d.as_nanos());
 
         i += 1;
     }
