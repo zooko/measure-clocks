@@ -35,7 +35,7 @@ use std::mem::MaybeUninit;
 
 #[cfg(target_vendor = "apple")]
 pub mod plat_apple {
-    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration};
+    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration, libc_gettime_clock, MaybeUninit};
     use libc::clockid_t;
     unsafe extern "C" {
         fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
@@ -50,12 +50,12 @@ pub mod plat_apple {
         while i < NUM_ARGS {
             let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
 
-            thread::sleep(Duration::from_nanos(SLEEP_NANOS));
+            thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
 
             let now = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
 
             let dur = now - prev;
-            let dif = dur - SLEEP_NANOS;
+            let dif = dur - SLEEP_NANOS as u64;
             
             durations.push(dif as u128);
 
@@ -88,12 +88,12 @@ pub mod plat_apple {
         while i < NUM_ARGS {
             let t1 = unsafe { mach_absolute_time() };
 
-            thread::sleep(Duration::from_nanos(SLEEP_NANOS));
+            thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
 
             let t2 = unsafe { mach_absolute_time() };
 
             let nanos = ((t2 - t1) * mtt2.numer as u64) / mtt2.denom as u64;
-            let dif = nanos - SLEEP_NANOS;
+            let dif = nanos - SLEEP_NANOS as u64;
             durations.push(dif as u128);
 
             i += 1;
