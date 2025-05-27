@@ -1,9 +1,20 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "measure-clocks"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mach-sys = "0.5.4"
 rustc-hash = "2.1.1"
 thousands = "0.2.0"
+
+[target.'cfg(target_vendor="apple")'.dependencies]
+mach-sys = "0.5.4"
+
+[target.'cfg(target_arch="x86_64")'.dependencies]
+cpuid = "0.1.1"
+
+[profile.release]
+lto = "fat"
+rustflags = ["-C", "target-cpu=native"]

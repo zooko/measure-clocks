@@ -138,7 +138,7 @@ fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
 
         let durnanos = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
         let dif = durnanos - SLEEP_NANOS as i64;
-            
+
         durations.push(dif as u128);
 
         i += 1;
@@ -166,14 +166,19 @@ fn libc_gettime_monotonic_raw() -> Vec<u128> {
 pub mod plat_x86_64 {
     use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration};
     use core::arch::x86_64;
+
+    use cpuid;
+
     pub fn measure_rdtscp() -> Vec<u128> {
         eprintln!("rdtscp");
 
         let mut durations = Vec::with_capacity(NUM_ARGS as usize);
         let mut i = 0;
     
-        let mut prevaux = 0;
-        unsafe { x86_64::__rdtscp(&mut prevaux) };
+        let ofreq = cpuid::clock_frequency();
+        assert!(ofreq.is_some());
+        let mut prev_freq_mhz = ofreq.unwrap();
+        eprintln!("freq {} MHz", prev_freq_mhz);
 
         while i < NUM_ARGS {
             let mut aux1 = 0;
@@ -185,11 +190,16 @@ pub mod plat_x86_64 {
             let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
 
             assert_eq!(aux1, aux2);
-            assert_eq!(aux1, prevaux);
-            prevaux = aux1;
 
             let durcycles = now2 - now1;
-            let durnanos = durcycles * 1_000_000_000 / 2_197_454_000;
+
+            let ofreq = cpuid::clock_frequency();
+            assert!(ofreq.is_some());
+            let freq_mhz = ofreq.unwrap();
+            assert_eq!(prev_freq_mhz, freq_mhz); // frequency changed
+            prev_freq_mhz = freq_mhz;
+
+            let durnanos = durcycles * 1000 / freq_mhz as u64;
             let dif = durnanos - SLEEP_NANOS as u64;
             
             durations.push(dif as u128);
