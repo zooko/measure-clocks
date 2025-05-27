@@ -5,7 +5,10 @@ use rustc_hash::FxHashMap;
 
 extern crate libc;
 
-const NUM_ARGS: u128 = 1_000_000;
+const NUM_ARGS: u128 = 1000;
+
+// const SLEEP_NANOS: u128 = 40_000;
+const SLEEP_NANOS: u128 = 0;
 
 fn instant() -> Vec<u128> {
     eprintln!("instant");
@@ -15,8 +18,12 @@ fn instant() -> Vec<u128> {
 
     while i < NUM_ARGS {
         let inst = Instant::now();
+
+        thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
+
         let d = inst.elapsed();
-        durations.push(d.as_nanos());
+        let dif = d.as_nanos() - SLEEP_NANOS;
+        durations.push(dif);
 
         i += 1;
     }
@@ -26,51 +33,113 @@ fn instant() -> Vec<u128> {
 
 use std::mem::MaybeUninit;
 
-use libc::clockid_t;
-unsafe extern "C" {
-    fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
-}
-
-
-fn measure_clock_gettime_nsec_np() -> Vec<u128> {
-    eprintln!("clock_gettime_nsec_np");
-
-    let mut durations = Vec::with_capacity(NUM_ARGS as usize);
-    let mut i = 0;
-    
-    while i < NUM_ARGS {
-        let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
-        let now = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
-
-        let dur = now - prev;
-            
-        durations.push(dur as u128);
-
-        i += 1;
+#[cfg(target_vendor = "apple")]
+pub mod plat_apple {
+    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration};
+    use libc::clockid_t;
+    unsafe extern "C" {
+        fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
     }
 
-    durations
+    pub fn measure_clock_gettime_nsec_np() -> Vec<u128> {
+        eprintln!("clock_gettime_nsec_np");
+
+        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut i = 0;
+    
+        while i < NUM_ARGS {
+            let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+
+            thread::sleep(Duration::from_nanos(SLEEP_NANOS));
+
+            let now = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+
+            let dur = now - prev;
+            let dif = dur - SLEEP_NANOS;
+            
+            durations.push(dif as u128);
+
+            i += 1;
+        }
+
+        durations
+    }
+
+    pub fn libc_gettime_uptime_raw() -> Vec<u128> {
+        eprintln!("libc_gettime_uptime_raw");
+        libc_gettime_clock(libc::CLOCK_UPTIME_RAW)
+    }
+    
+    use mach_sys::mach_time::{mach_absolute_time, mach_timebase_info};
+    use mach_sys::kern_return::KERN_SUCCESS;
+    pub fn mat() -> Vec<u128> {
+        eprintln!("mach_absolute_time");
+
+        let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
+        let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
+        assert_eq!(retval, KERN_SUCCESS);
+        let mtt2 = unsafe { mtt1.assume_init() };
+
+        eprintln!("mach_timebase_info: {mtt2:?}");
+
+        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut i = 0;
+    
+        while i < NUM_ARGS {
+            let t1 = unsafe { mach_absolute_time() };
+
+            thread::sleep(Duration::from_nanos(SLEEP_NANOS));
+
+            let t2 = unsafe { mach_absolute_time() };
+
+            let nanos = ((t2 - t1) * mtt2.numer as u64) / mtt2.denom as u64;
+            let dif = nanos - SLEEP_NANOS;
+            durations.push(dif as u128);
+
+            i += 1;
+        }
+
+        durations
+    }
 }
     
-fn libc_gettime_clock(clock: u32) -> Vec<u128> {
+#[cfg(target_os = "macos")]
+type ClockType = u32;
+
+#[cfg(target_os = "linux")]
+type ClockType = i32;
+
+use std::thread;
+use std::time::Duration;
+
+fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
     let mut durations = Vec::with_capacity(NUM_ARGS as usize);
     let mut i = 0;
     
     while i < NUM_ARGS {
         let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
         let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
-        let retval1 = unsafe { libc::clock_gettime(clock, tp1.as_mut_ptr()) };
-        let retval2 = unsafe { libc::clock_gettime(clock, tp2.as_mut_ptr()) };
+
+        let retval1 = unsafe { libc::clock_gettime(clock as ClockType, tp1.as_mut_ptr()) };
+
+        thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
+
+        let retval2 = unsafe { libc::clock_gettime(clock as ClockType, tp2.as_mut_ptr()) };
+
         assert_eq!(retval1, 0);
         let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
+
+        thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
+
         let instnsec = unsafe { (*tp1.as_ptr()).tv_nsec };
         assert_eq!(retval2, 0);
         let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
         let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
 
-        let dur = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
+        let durnanos = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
+        let dif = durnanos - SLEEP_NANOS as i64;
             
-        durations.push(dur as u128);
+        durations.push(dif as u128);
 
         i += 1;
     }
@@ -93,37 +162,43 @@ fn libc_gettime_monotonic_raw() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC_RAW)
 }
     
-fn libc_gettime_uptime_raw() -> Vec<u128> {
-    eprintln!("libc_gettime_uptime_raw");
-    libc_gettime_clock(libc::CLOCK_UPTIME_RAW)
-}
+#[cfg(target_arch = "x86_64")]
+pub mod plat_x86_64 {
+    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration};
+    use core::arch::x86_64;
+    pub fn measure_rdtscp() -> Vec<u128> {
+        eprintln!("rdtscp");
+
+        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut i = 0;
     
-use mach_sys::mach_time::{mach_absolute_time, mach_timebase_info};
-use mach_sys::kern_return::KERN_SUCCESS;
-fn mat() -> Vec<u128> {
-    eprintln!("mach_absolute_time");
+        let mut prevaux = 0;
+        unsafe { x86_64::__rdtscp(&mut prevaux) };
 
-    let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
-    let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
-    assert_eq!(retval, KERN_SUCCESS);
-    let mtt2 = unsafe { mtt1.assume_init() };
+        while i < NUM_ARGS {
+            let mut aux1 = 0;
+            let mut aux2 = 0;
+            let now1 = unsafe { x86_64::__rdtscp(&mut aux1) };
 
-    eprintln!("mach_timebase_info: {mtt2:?}");
+            thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
 
-    let mut durations = Vec::with_capacity(NUM_ARGS as usize);
-    let mut i = 0;
-    
-    while i < NUM_ARGS {
-        let t1 = unsafe { mach_absolute_time() };
-        let t2 = unsafe { mach_absolute_time() };
+            let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
 
-        let nanos = ((t2 - t1) * mtt2.numer as u64) / mtt2.denom as u64;
-        durations.push(nanos as u128);
+            assert_eq!(aux1, aux2);
+            assert_eq!(aux1, prevaux);
+            prevaux = aux1;
 
-        i += 1;
+            let durcycles = now2 - now1;
+            let durnanos = durcycles * 1_000_000_000 / 2_197_454_000;
+            let dif = durnanos - SLEEP_NANOS as u64;
+            
+            durations.push(dif as u128);
+
+            i += 1;
+        }
+
+        durations
     }
-
-    durations
 }
 
 use thousands::Separable;
@@ -163,9 +238,14 @@ fn main() {
     eprintln!();
     stats(libc_gettime_monotonic_raw);
     eprintln!();
-    stats(libc_gettime_uptime_raw);
-    eprintln!();
-    stats(mat);
-    eprintln!();
-    stats(measure_clock_gettime_nsec_np);
+#[cfg(target_vendor = "apple")]
+    {
+        stats(plat_apple::libc_gettime_uptime_raw);
+        eprintln!();
+        stats(plat_apple::mat);
+        eprintln!();
+        stats(plat_apple::measure_clock_gettime_nsec_np);
+    }
+#[cfg(target_arch = "x86_64")]
+    stats(plat_x86_64::measure_rdtscp);
 }
