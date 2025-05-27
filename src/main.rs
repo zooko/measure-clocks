@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 
 extern crate libc;
 
-const NUM_ARGS: u128 = 1000;
+const NUM_SAMPLES: u128 = 1000;
 
 // const SLEEP_NANOS: u128 = 40_000;
 const SLEEP_NANOS: u128 = 0;
@@ -13,10 +13,10 @@ const SLEEP_NANOS: u128 = 0;
 fn instant() -> Vec<u128> {
     eprintln!("instant");
 
-    let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+    let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
     let mut i = 0;
 
-    while i < NUM_ARGS {
+    while i < NUM_SAMPLES {
         let inst = Instant::now();
 
         thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
@@ -35,7 +35,7 @@ use std::mem::MaybeUninit;
 
 #[cfg(target_vendor = "apple")]
 pub mod plat_apple {
-    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration, libc_gettime_clock, MaybeUninit};
+    use crate::{NUM_SAMPLES, SLEEP_NANOS, thread, Duration, libc_gettime_clock, MaybeUninit};
     use libc::clockid_t;
     unsafe extern "C" {
         fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
@@ -44,10 +44,10 @@ pub mod plat_apple {
     pub fn measure_clock_gettime_nsec_np() -> Vec<u128> {
         eprintln!("clock_gettime_nsec_np");
 
-        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
-        while i < NUM_ARGS {
+        while i < NUM_SAMPLES {
             let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
 
             thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
@@ -82,10 +82,10 @@ pub mod plat_apple {
 
         eprintln!("mach_timebase_info: {mtt2:?}");
 
-        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
-        while i < NUM_ARGS {
+        while i < NUM_SAMPLES {
             let t1 = unsafe { mach_absolute_time() };
 
             thread::sleep(Duration::from_nanos(SLEEP_NANOS as u64));
@@ -113,10 +113,10 @@ use std::thread;
 use std::time::Duration;
 
 fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
-    let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+    let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
     let mut i = 0;
     
-    while i < NUM_ARGS {
+    while i < NUM_SAMPLES {
         let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
         let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
 
@@ -164,7 +164,7 @@ fn libc_gettime_monotonic_raw() -> Vec<u128> {
     
 #[cfg(target_arch = "x86_64")]
 pub mod plat_x86_64 {
-    use crate::{NUM_ARGS, SLEEP_NANOS, thread, Duration};
+    use crate::{NUM_SAMPLES, SLEEP_NANOS, thread, Duration};
     use core::arch::x86_64;
 
     use cpuid;
@@ -172,7 +172,7 @@ pub mod plat_x86_64 {
     pub fn measure_rdtscp() -> Vec<u128> {
         eprintln!("rdtscp");
 
-        let mut durations = Vec::with_capacity(NUM_ARGS as usize);
+        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
         let ofreq = cpuid::clock_frequency();
@@ -180,7 +180,7 @@ pub mod plat_x86_64 {
         let mut prev_freq_mhz = ofreq.unwrap();
         eprintln!("freq {} MHz", prev_freq_mhz);
 
-        while i < NUM_ARGS {
+        while i < NUM_SAMPLES {
             let mut aux1 = 0;
             let mut aux2 = 0;
             let now1 = unsafe { x86_64::__rdtscp(&mut aux1) };
@@ -232,7 +232,7 @@ where
     println!("{:>10} {:>10} {:>10} {:>10}", "-----", "-", "---------", "---------");
     let mut sum = 0;
     for (key, value) in pairs {
-        println!("{:>10} {:>10} {:>10} {:>10}", key.separate_with_commas(), value.separate_with_commas(), (value + sum).separate_with_commas(), (NUM_ARGS - value - sum).separate_with_commas());
+        println!("{:>10} {:>10} {:>10} {:>10}", key.separate_with_commas(), value.separate_with_commas(), (value + sum).separate_with_commas(), (NUM_SAMPLES - value - sum).separate_with_commas());
         sum += value;
     }
 }
