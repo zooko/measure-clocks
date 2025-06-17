@@ -4,7 +4,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 extern crate libc;
 
-const NUM_SAMPLES: u128 = 10_000_000;
+const NUM_SAMPLES: u128 = 1_000_000;
 
 pub fn dummy_func() -> i64 {
     // When I make this code a little faster/simpler then gettime_cputime on Macos starts telling me
@@ -190,22 +190,23 @@ pub mod plat_x86_64 {
 
             let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
 
-            assert_eq!(aux1, aux2);
+            if aux1 == aux2 {
+                let durcycles = now2 - now1;
 
-            let durcycles = now2 - now1;
+	        let ofreq = cpuid::clock_frequency();
+                assert!(ofreq.is_some());
+                let freq_mhz = ofreq.unwrap();
+                assert_eq!(prev_freq_mhz, freq_mhz); // frequency changed
+                prev_freq_mhz = freq_mhz;
 
-            let ofreq = cpuid::clock_frequency();
-            assert!(ofreq.is_some());
-            let freq_mhz = ofreq.unwrap();
-            assert_eq!(prev_freq_mhz, freq_mhz); // frequency changed
-            prev_freq_mhz = freq_mhz;
-
-            let durnanos = durcycles as u128 * 1000 / freq_mhz as u128;
-            assert!(durnanos > 0);
+                let durnanos = durcycles as u128 * 1000 / freq_mhz as u128;
+                assert!(durnanos > 0);
             
-            durations.push(durnanos);
+                durations.push(durnanos);
 
-            i += 1;
+                i += 1;
+	    }
+
         }
 
         durations
@@ -232,17 +233,19 @@ where
     let mut perc95: u128 = 0;
     let min: u128 = *pairs[0].0;
 
+    let numsamples = pairs.len() as u128;
+
     //println!("{:>10} {:>10} {:>10} {:>10}", "nanos", "#", "# < nanos", "# > nanos");
     //println!("{:>10} {:>10} {:>10} {:>10}", "-----", "-", "---------", "---------");
     let mut sumnanos = 0;
     let mut sumnums = 0;
     for (nanos, num) in &pairs {
-        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sumnums).separate_with_commas(), (NUM_SAMPLES - num - sumnums).separate_with_commas());
-        if (sumnums + *num >= NUM_SAMPLES * 95 / 100) && (sumnums < NUM_SAMPLES * 95 / 100) {
+        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sumnums).separate_with_commas(), (numsamples - num - sumnums).separate_with_commas());
+        if (sumnums + *num >= numsamples * 95 / 100) && (sumnums < numsamples * 95 / 100) {
             //println!("95 percentile");
             perc95 = **nanos;
         }
-        if (sumnums + *num >= NUM_SAMPLES * 50 / 100) && (sumnums < NUM_SAMPLES * 50 / 100) {
+        if (sumnums + *num >= numsamples * 50 / 100) && (sumnums < numsamples * 50 / 100) {
             //println!("50 percentile");
             perc50 = **nanos;
         }
@@ -250,7 +253,7 @@ where
         sumnums += *num;
     }
     assert!(sumnanos < i128::MAX as u128);
-    let mean: i128 = (sumnanos / NUM_SAMPLES).try_into().unwrap();
+    let mean: i128 = (sumnanos / numsamples).try_into().unwrap();
 
     if perc50 == 0 {
         perc50 = *pairs[pairs.len()-1].0;
@@ -261,12 +264,12 @@ where
 
     let mut sumsquares = 0;
     for (nanos, num) in pairs {
-        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sum).separate_with_commas(), (NUM_SAMPLES - num - sum).separate_with_commas());
+        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sum).separate_with_commas(), (numsamples - num - sum).separate_with_commas());
         let diff: i128 = *nanos as i128 - mean;
         let sqdiff: u128 = diff.pow(2).try_into().unwrap();
         sumsquares += sqdiff * *num;
     }
-    let stddev = (sumsquares / (NUM_SAMPLES - 1)).isqrt();
+    let stddev = (sumsquares / (numsamples - 1)).isqrt();
 
     println!("{fnname:>21} {min:>6} {perc50:>6} {perc95:>6} {mean:>6} {stddev:>7}");
 }
