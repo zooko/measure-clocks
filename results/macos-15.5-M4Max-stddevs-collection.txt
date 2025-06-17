@@ -1,0 +1,9 @@
+these are the stddev results from 9 separate runs of the measure-clocks binary
+
+instant              :     189     201     215     222     298     300     306     314     345
+gettime_cputime      :     536     541     542     580     586     587     591     592     597
+gettime_monotonic    :     409     472     484     500     501     511     511     514     524
+gettime_monotonic_raw:     196     198     222     278     278     285     301     323     324
+gettime_uptime_raw   :     200     207     208     263     274     283     284     288     307
+mach_absolute_time   :     191     216     251     298     314     326     351     358     613
+gettime_nsec_np      :     213     214     232     291     313     316     317     350     391
