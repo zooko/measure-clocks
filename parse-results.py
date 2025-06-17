@@ -4,13 +4,13 @@ import os, re, sys
 
 d = {}
 
-for fname in os.listdir("."):
+for fname in os.listdir(os.path.join(".", "results")):
     # print("%r" % fname)
     
-    for l in open(fname, "r").readlines():
+    for l in open(os.path.join(".", "results", fname), "r").readlines():
         l = l.strip()
     
-        mo = re.search("^( *[^ ]*).*?([0-9]+)$", l)
+        mo = re.search("^( *[^: ]*).*?([0-9]+)$", l)
 
         if mo:
             # print("mo.group(1): %r, mo.group(2): %r" % (mo.group(1), mo.group(2),))
