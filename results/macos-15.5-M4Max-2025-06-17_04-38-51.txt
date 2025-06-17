@@ -1,1 +1,0 @@
-time ./target/release/measure-clocks

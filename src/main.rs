@@ -233,14 +233,16 @@ where
     let mut perc95: u128 = 0;
     let min: u128 = *pairs[0].0;
 
-    let numsamples = pairs.len() as u128;
-
+    let mut numsamples: u128 = 0;
+    for (_nanos, num) in &pairs {
+        numsamples += *num;
+    }
+    
     //println!("{:>10} {:>10} {:>10} {:>10}", "nanos", "#", "# < nanos", "# > nanos");
     //println!("{:>10} {:>10} {:>10} {:>10}", "-----", "-", "---------", "---------");
     let mut sumnanos = 0;
     let mut sumnums = 0;
     for (nanos, num) in &pairs {
-        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sumnums).separate_with_commas(), (numsamples - num - sumnums).separate_with_commas());
         if (sumnums + *num >= numsamples * 95 / 100) && (sumnums < numsamples * 95 / 100) {
             //println!("95 percentile");
             perc95 = **nanos;
@@ -264,19 +266,21 @@ where
 
     let mut sumsquares = 0;
     for (nanos, num) in pairs {
-        //println!("{:>10} {:>10} {:>10} {:>10}", nanos.separate_with_commas(), num.separate_with_commas(), (num + sum).separate_with_commas(), (numsamples - num - sum).separate_with_commas());
         let diff: i128 = *nanos as i128 - mean;
         let sqdiff: u128 = diff.pow(2).try_into().unwrap();
         sumsquares += sqdiff * *num;
     }
     let stddev = (sumsquares / (numsamples - 1)).isqrt();
 
-    println!("{fnname:>21} {min:>6} {perc50:>6} {perc95:>6} {mean:>6} {stddev:>7}");
+    println!("{fnname:>21} {:>11} {min:>6} {perc50:>6} {perc95:>6} {mean:>6} {stddev:>7}", numsamples.separate_with_commas());
 }
 
+use thousands::Separable;
+
 fn main() {
-    println!("{:>21} {:>6} {:>6} {:>6} {:>6} {:>7}", "fnname", "min", "50th%", "95th%", "mean", "stddev");
-    println!("{:>21} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "---", "-----", "-----", "----", "------");
+//    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
+    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>7}", "fnname", "nsamples", "min", "50th%", "95th%", "mean", "stddev");
+    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "--------", "---", "-----", "-----", "----", "------");
 
     stats(instant, "instant");
     stats(gettime_cputime, "gettime_cputime");
