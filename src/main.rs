@@ -4,7 +4,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 extern crate libc;
 
-const NUM_SAMPLES: u128 = 100_000_000;
+const NUM_SAMPLES: u128 = 10_000_000;
 
 pub fn dummy_func() -> i64 {
     // When I make this code a little faster/simpler then gettime_cputime on Macos starts telling me
@@ -166,8 +166,9 @@ fn gettime_monotonic_raw() -> Vec<u128> {
     
 #[cfg(target_arch = "x86_64")]
 pub mod plat_x86_64 {
-    use crate::{NUM_SAMPLES, thread, Duration};
+    use crate::{dummy_func, NUM_SAMPLES};
     use core::arch::x86_64;
+    use std::hint::black_box;
 
     use cpuid;
 
@@ -199,7 +200,7 @@ pub mod plat_x86_64 {
             assert_eq!(prev_freq_mhz, freq_mhz); // frequency changed
             prev_freq_mhz = freq_mhz;
 
-            let durnanos = durcycles * 1000 / freq_mhz;
+            let durnanos = durcycles as u128 * 1000 / freq_mhz as u128;
             assert!(durnanos > 0);
             
             durations.push(durnanos);
