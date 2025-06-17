@@ -4,7 +4,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 extern crate libc;
 
-const NUM_SAMPLES: u128 = 1_000_000;
+const NUM_SAMPLES: u128 = 10_000_000;
 
 pub fn dummy_func() -> i64 {
     // When I make this code a little faster/simpler then gettime_cputime on Macos starts telling me
