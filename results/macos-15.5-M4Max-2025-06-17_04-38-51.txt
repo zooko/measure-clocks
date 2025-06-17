@@ -1,9 +1,1 @@
-               fnname    min  50th%  95th%   mean  stddev
-               ------    ---  -----  -----   ----  ------
-              instant   1041   1208   1417   1194     198
-      gettime_cputime   1000   1000   2000   1402     580
-    gettime_monotonic   1000   1000   2000   1226     450
-gettime_monotonic_raw   1041   1208   1375   1217     190
-   gettime_uptime_raw   1041   1208   1375   1228     196
-   mach_absolute_time   1041   1208   1375   1217     197
-      gettime_nsec_np   1041   1209   1541   1251     221
+time ./target/release/measure-clocks
