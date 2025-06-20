@@ -31,7 +31,7 @@ for (k, v) in d.items():
     # print("--- k: %r, v: %r" % (k, v,))
     s = format(f"{k:21s}:")
     for v in lis:
-        s += format(f" {v: 5d}")
+        s += format(f" {v: 6d}")
 
     print(s)
        
