@@ -7,7 +7,7 @@ extern crate libc;
 const NUM_SAMPLES: u128 = 10_000_000;
 
 pub fn dummy_func() -> i64 {
-    // When I make this code a little faster/simpler then gettime_cputime on Macos starts telling me
+    // When I make this code a little faster/simpler then cputime on Macos starts telling me
     // that it took 0 nanoseconds. 🤔
     let mut a = Arc::new(0);
     for i in 0..30 {
@@ -45,26 +45,26 @@ use std::mem::MaybeUninit;
 #[cfg(target_vendor = "apple")]
 pub mod plat_apple {
     use std::hint::black_box;
-    use crate::{NUM_SAMPLES, dummy_func, libc_gettime_clock, MaybeUninit};
+    use crate::{ClockType, NUM_SAMPLES, dummy_func, libc_gettime_clock, MaybeUninit};
     use libc::clockid_t;
     unsafe extern "C" {
         fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
     }
 
-    pub fn gettime_nsec_np() -> Vec<u128> {
+    pub fn gettime_nsec_np_clock(clock: ClockType) -> Vec<u128> {
         let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
         while i < NUM_SAMPLES {
-            let prev = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+            let prev = unsafe { clock_gettime_nsec_np(clock) };
 
             black_box(dummy_func());
 
-            let now = unsafe { clock_gettime_nsec_np(libc::CLOCK_UPTIME_RAW) };
+            let now = unsafe { clock_gettime_nsec_np(clock) };
 
+            assert!(now > prev);
             let dur: u128 = u128::from(now - prev);
-            assert!(dur > 0);
-            
+
             durations.push(dur);
 
             i += 1;
@@ -73,10 +73,26 @@ pub mod plat_apple {
         durations
     }
 
-    pub fn gettime_uptime_raw() -> Vec<u128> {
+    pub fn uptime_raw() -> Vec<u128> {
         libc_gettime_clock(libc::CLOCK_UPTIME_RAW)
     }
     
+    pub fn nsec_np_uptime_raw() -> Vec<u128> {
+        gettime_nsec_np_clock(libc::CLOCK_UPTIME_RAW)
+    }
+
+    pub fn nsec_np_cputime() -> Vec<u128> {
+        gettime_nsec_np_clock(libc::CLOCK_PROCESS_CPUTIME_ID)
+    }
+
+    pub fn nsec_np_monotonic() -> Vec<u128> {
+        gettime_nsec_np_clock(libc::CLOCK_MONOTONIC)
+    }
+
+    pub fn nsec_np_monotonic_raw() -> Vec<u128> {
+        gettime_nsec_np_clock(libc::CLOCK_MONOTONIC_RAW)
+    }
+
     use mach_sys::mach_time::{mach_absolute_time, mach_timebase_info};
     use mach_sys::kern_return::KERN_SUCCESS;
     pub fn m_mach_absolute_time() -> Vec<u128> {
@@ -125,11 +141,11 @@ fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
         let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
         let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
 
-        let retval1 = unsafe { libc::clock_gettime(clock as ClockType, tp1.as_mut_ptr()) };
+        let retval1 = unsafe { libc::clock_gettime(clock, tp1.as_mut_ptr()) };
 
         black_box(dummy_func());
 
-        let retval2 = unsafe { libc::clock_gettime(clock as ClockType, tp2.as_mut_ptr()) };
+        let retval2 = unsafe { libc::clock_gettime(clock, tp2.as_mut_ptr()) };
 
         assert_eq!(retval1, 0);
         let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
@@ -152,15 +168,15 @@ fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
     durations
 }
     
-fn gettime_cputime() -> Vec<u128> {
+fn cputime() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_PROCESS_CPUTIME_ID)
 }
 
-fn gettime_monotonic() -> Vec<u128> {
+fn monotonic() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC)
 }
     
-fn gettime_monotonic_raw() -> Vec<u128> {
+fn monotonic_raw() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC_RAW)
 }
     
@@ -281,14 +297,17 @@ fn main() {
     println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "--------", "---", "-----", "-----", "----", "------");
 
     stats(instant, "instant");
-    stats(gettime_cputime, "gettime_cputime");
-    stats(gettime_monotonic, "gettime_monotonic");
-    stats(gettime_monotonic_raw, "gettime_monotonic_raw");
+    stats(cputime, "cputime");
+    stats(monotonic, "monotonic");
+    stats(monotonic_raw, "monotonic_raw");
 #[cfg(target_vendor = "apple")]
     {
-        stats(plat_apple::gettime_uptime_raw, "gettime_uptime_raw");
         stats(plat_apple::m_mach_absolute_time, "mach_absolute_time");
-        stats(plat_apple::gettime_nsec_np, "gettime_nsec_np");
+        stats(plat_apple::uptime_raw, "uptime_raw");
+        stats(plat_apple::nsec_np_uptime_raw, "nsec_np_uptime_raw");
+        stats(plat_apple::nsec_np_cputime, "nsec_np_cputime");
+        stats(plat_apple::nsec_np_monotonic, "nsec_np_monotonic");
+        stats(plat_apple::nsec_np_monotonic_raw, "nsec_np_monotonic_raw");
     }
 #[cfg(target_arch = "x86_64")]
     stats(plat_x86_64::rdtscp, "rdtscp");
