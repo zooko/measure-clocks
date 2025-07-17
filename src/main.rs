@@ -6,6 +6,7 @@ extern crate libc;
 
 const NUM_SAMPLES: u128 = 10_000_000;
 
+#[inline(never)]
 pub fn dummy_func() -> i64 {
     // When I make this code a little faster/simpler then cputime on Macos starts telling me
     // that it took 0 nanoseconds. 🤔
