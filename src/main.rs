@@ -246,6 +246,7 @@ where
     let mut perc50: u128 = 0;
     let mut perc95: u128 = 0;
     let min: u128 = *pairs[0].0;
+    let max: u128 = *pairs[(*pairs).len()-1].0;
 
     let mut numsamples: u128 = 0;
     for (_nanos, num) in &pairs {
@@ -286,15 +287,15 @@ where
     }
     let stddev = (sumsquares / (numsamples - 1)).isqrt();
 
-    println!("{fnname:>21} {:>11} {min:>6} {perc50:>6} {perc95:>6} {mean:>6} {stddev:>7}", numsamples.separate_with_commas());
+    println!("{fnname:>21} {:>11} {min:>6} {perc50:>6} {mean:>6} {perc95:>6} {max:>6} {stddev:>7}", numsamples.separate_with_commas());
 }
 
 use thousands::Separable;
 
 fn main() {
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
-    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>7}", "fnname", "nsamples", "min", "50th%", "95th%", "mean", "stddev");
-    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "--------", "---", "-----", "-----", "----", "------");
+    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
+    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "--------", "---", "------", "----", "------", "---", "------");
 
     stats(instant, "instant");
     stats(cputime, "cputime");
