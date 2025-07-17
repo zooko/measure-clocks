@@ -192,11 +192,9 @@ pub mod plat_x86_64 {
         let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
-        let ofreq = cpuid::clock_frequency();
-        debug_assert!(ofreq.is_some());
-        let orig_freq_mhz = ofreq.unwrap();
-        debug_assert!(orig_freq_mhz > 0);
-        //eprintln!("freq {} MHz", orig_freq_mhz);
+        let mut prev_freq_mhz = cpuid::clock_frequency().unwrap();
+        debug_assert!(prev_freq_mhz > 0);
+        //eprintln!("freq {} MHz", prev_freq_mhz);
 
         while i < NUM_SAMPLES {
             let mut aux1 = 0;
@@ -207,18 +205,18 @@ pub mod plat_x86_64 {
 
             let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
 
-            if aux1 == aux2 {
-                debug_assert_eq!(orig_freq_mhz, cpuid::clock_frequency().unwrap());
-
+            let freq_mhz = cpuid::clock_frequency().unwrap();
+            if aux1 == aux2 && prev_freq_mhz == freq_mhz {
                 debug_assert!(now2 > now1);
                 let durcycles = now2 - now1;
 
-                let durnanos: u128 = (durcycles * 1000 / orig_freq_mhz as u64).into();
+                let durnanos: u128 = (durcycles * 1000 / freq_mhz as u64).into();
                 debug_assert!(durnanos > 0);
             
                 durations.push(durnanos);
 
 	    }
+            prev_freq_mhz = freq_mhz;
 
             i += 1;
         }
