@@ -181,11 +181,6 @@ fn monotonic_raw() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC_RAW)
 }
     
-#[cfg(target_os = "linux")]
-fn monotonic_coarse() -> Vec<u128> {
-    libc_gettime_clock(libc::CLOCK_MONOTONIC_COARSE)
-}
-    
 #[cfg(target_arch = "x86_64")]
 pub mod plat_x86_64 {
     use crate::{dummy_func, NUM_SAMPLES};
@@ -316,6 +311,4 @@ fn main() {
     }
 #[cfg(target_arch = "x86_64")]
     stats(plat_x86_64::rdtscp, "rdtscp");
-#[cfg(target_os = "linux")]
-    stats(monotonic_coarse, "monotonic_coarse");
 }
