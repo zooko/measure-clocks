@@ -286,29 +286,51 @@ where
     }
     let stddev = (sumsquares / (numsamples - 1)).isqrt();
 
-    println!("{fnname:>21} {:>11} {min:>6} {perc50:>6} {mean:>6} {perc95:>6} {max:>6} {stddev:>7}", numsamples.separate_with_commas());
+    println!("{fnname:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), stddev.separate_with_commas());
 }
 
 use thousands::Separable;
 
-fn main() {
-//    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
-    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
-    println!("{:>21} {:>11} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7}", "------", "--------", "---", "------", "----", "------", "---", "------");
+use std::thread;
 
-    stats(instant, "instant");
-    stats(cputime, "cputime");
-    stats(monotonic, "monotonic");
-    stats(monotonic_raw, "monotonic_raw");
+macro_rules! add_wrapped_fn {
+    ($vec:expr, $original:path) => {
+        $vec.push(|| {
+            stats($original, stringify!($original));
+        });
+    };
+}
+
+fn main() {
+    let mut fns: Vec<fn()> = Vec::new();
+    let mut handles = Vec::new();
+
+    add_wrapped_fn!(fns, instant);
+    add_wrapped_fn!(fns, cputime);
+    add_wrapped_fn!(fns, monotonic);
+    add_wrapped_fn!(fns, monotonic_raw);
 #[cfg(target_vendor = "apple")]
     {
-        stats(plat_apple::m_mach_absolute_time, "mach_absolute_time");
-        stats(plat_apple::uptime_raw, "uptime_raw");
-        stats(plat_apple::nsec_np_uptime_raw, "nsec_np_uptime_raw");
-        stats(plat_apple::nsec_np_cputime, "nsec_np_cputime");
-        stats(plat_apple::nsec_np_monotonic, "nsec_np_monotonic");
-        stats(plat_apple::nsec_np_monotonic_raw, "nsec_np_monotonic_raw");
+        add_wrapped_fn!(fns, plat_apple::m_mach_absolute_time);
+        add_wrapped_fn!(fns, plat_apple::uptime_raw);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_uptime_raw);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_cputime);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic_raw);
     }
 #[cfg(target_arch = "x86_64")]
-    stats(plat_x86_64::rdtscp, "rdtscp");
+    add_wrapped_fn!(fns, plat_x86_64::rdtscp);
+
+//    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
+    println!("{:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
+    println!("{:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", "------", "--------", "---", "------", "----", "------", "---", "------");
+
+    for func in fns {
+        let handle = thread::spawn(func);
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();  // Handle potential errors in production
+    }
 }
