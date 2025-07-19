@@ -187,27 +187,44 @@ pub mod plat_x86_64 {
     use core::arch::x86_64;
     use std::hint::black_box;
 
-    pub fn rdtscp_ticks() -> Vec<u128> {
-        let mut durticks = Vec::with_capacity(NUM_SAMPLES as usize);
+    pub fn rdtscp_secs() -> Vec<u128> {
+        let (numer, denomer) = calibrate_tsc(1_000_000);
+
+        let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
-    
+        
         while i < NUM_SAMPLES {
-            let mut aux1 = 0;
-            let mut aux2 = 0;
-            let now1 = unsafe { x86_64::__rdtscp(&mut aux1) };
+            let now1 = unsafe { x86_64::__rdtscp() };
 
             black_box(dummy_func());
 
-            let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
+            let now2 = unsafe { x86_64::__rdtscp() };
 
             debug_assert!(now2 > now1);
+            let ticks = now2 - now1;
+            let secs = durticks * numer / denomer;
 
-            durticks.push((now2 - now1).into());
+            res.push(secs);
 
             i += 1;
         }
 
         durticks
+    }
+
+    /// Returns the number of tsc ticks per nanosecond, in (numer. denomer) format.
+    /// Sleeps for about `caltime_nanos` nanoseconds in order to calibrate.
+    fn calibrate_tsc(caltime_nanos: u64) -> (u64, u64) {
+        let d = Duration::from_nanos(caltime_nanos);
+        let start_instant = Instant::now();
+        let start_tsc = unsafe { x86_64::__rdtscp() };
+        sleep(d);
+        let end_tsc = unsafe { x86_64::__rdtscp() };
+        let elap = start_instant.elapsed();
+        assert!(end_tsc > start_tsc);
+        assert!(elap.as_nanos() > 0);
+
+        (end_tsc - start_tsc, elap.as_nanos())
     }
 }
 
@@ -304,7 +321,7 @@ fn main() {
         add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic_raw_secs);
     }
 #[cfg(target_arch = "x86_64")]
-    add_wrapped_fn!(fns, plat_x86_64::rdtscp_ticks);
+    add_wrapped_fn!(fns, plat_x86_64::rdtscp_secs);
 
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
     println!("{:>38} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
