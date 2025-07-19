@@ -22,7 +22,7 @@ pub fn dummy_func() -> i64 {
 
 use std::sync::Arc;
 use std::hint::black_box;
-fn instant() -> Vec<u128> {
+fn instant_secs() -> Vec<u128> {
     let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
 
     let mut i = 0;
@@ -74,29 +74,29 @@ pub mod plat_apple {
         durations
     }
 
-    pub fn uptime_raw() -> Vec<u128> {
+    pub fn uptime_raw_secs() -> Vec<u128> {
         libc_gettime_clock(libc::CLOCK_UPTIME_RAW)
     }
     
-    pub fn nsec_np_uptime_raw() -> Vec<u128> {
+    pub fn nsec_np_uptime_raw_secs() -> Vec<u128> {
         gettime_nsec_np_clock(libc::CLOCK_UPTIME_RAW)
     }
 
-    pub fn nsec_np_cputime() -> Vec<u128> {
+    pub fn nsec_np_cputime_secs() -> Vec<u128> {
         gettime_nsec_np_clock(libc::CLOCK_PROCESS_CPUTIME_ID)
     }
 
-    pub fn nsec_np_monotonic() -> Vec<u128> {
+    pub fn nsec_np_monotonic_secs() -> Vec<u128> {
         gettime_nsec_np_clock(libc::CLOCK_MONOTONIC)
     }
 
-    pub fn nsec_np_monotonic_raw() -> Vec<u128> {
+    pub fn nsec_np_monotonic_raw_secs() -> Vec<u128> {
         gettime_nsec_np_clock(libc::CLOCK_MONOTONIC_RAW)
     }
 
     use mach_sys::mach_time::{mach_absolute_time, mach_timebase_info};
     use mach_sys::kern_return::KERN_SUCCESS;
-    pub fn m_mach_absolute_time() -> Vec<u128> {
+    pub fn mach_absolute_time_secs() -> Vec<u128> {
         let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
         let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
         assert_eq!(retval, KERN_SUCCESS);
@@ -169,15 +169,15 @@ fn libc_gettime_clock(clock: ClockType) -> Vec<u128> {
     durations
 }
     
-fn cputime() -> Vec<u128> {
+fn cputime_secs() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_PROCESS_CPUTIME_ID)
 }
 
-fn monotonic() -> Vec<u128> {
+fn monotonic_secs() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC)
 }
     
-fn monotonic_raw() -> Vec<u128> {
+fn monotonic_raw_secs() -> Vec<u128> {
     libc_gettime_clock(libc::CLOCK_MONOTONIC_RAW)
 }
     
@@ -187,16 +187,10 @@ pub mod plat_x86_64 {
     use core::arch::x86_64;
     use std::hint::black_box;
 
-    use cpuid;
-
-    pub fn rdtscp() -> Vec<u128> {
-        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+    pub fn rdtscp_ticks() -> Vec<u128> {
+        let mut durticks = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
     
-        let mut prev_freq_mhz = cpuid::clock_frequency().unwrap();
-        debug_assert!(prev_freq_mhz > 0);
-        //eprintln!("freq {} MHz", prev_freq_mhz);
-
         while i < NUM_SAMPLES {
             let mut aux1 = 0;
             let mut aux2 = 0;
@@ -206,23 +200,14 @@ pub mod plat_x86_64 {
 
             let now2 = unsafe { x86_64::__rdtscp(&mut aux2) };
 
-            let freq_mhz = cpuid::clock_frequency().unwrap();
-            if aux1 == aux2 && prev_freq_mhz == freq_mhz {
-                debug_assert!(now2 > now1);
-                let durcycles = now2 - now1;
+            debug_assert!(now2 > now1);
 
-                let durnanos: u128 = (durcycles * 1000 / freq_mhz as u64).into();
-                debug_assert!(durnanos > 0);
-            
-                durations.push(durnanos);
-
-	    }
-            prev_freq_mhz = freq_mhz;
+            durticks.push((now2 - now1).into());
 
             i += 1;
         }
 
-        durations
+        durticks
     }
 }
 
@@ -305,21 +290,21 @@ fn main() {
     let mut fns: Vec<fn()> = Vec::new();
     let mut handles = Vec::new();
 
-    add_wrapped_fn!(fns, instant);
-    add_wrapped_fn!(fns, cputime);
-    add_wrapped_fn!(fns, monotonic);
-    add_wrapped_fn!(fns, monotonic_raw);
+    add_wrapped_fn!(fns, instant_secs);
+    add_wrapped_fn!(fns, cputime_secs);
+    add_wrapped_fn!(fns, monotonic_secs);
+    add_wrapped_fn!(fns, monotonic_raw_secs);
 #[cfg(target_vendor = "apple")]
     {
-        add_wrapped_fn!(fns, plat_apple::m_mach_absolute_time);
-        add_wrapped_fn!(fns, plat_apple::uptime_raw);
-        add_wrapped_fn!(fns, plat_apple::nsec_np_uptime_raw);
-        add_wrapped_fn!(fns, plat_apple::nsec_np_cputime);
-        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic);
-        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic_raw);
+        add_wrapped_fn!(fns, plat_apple::m_mach_absolute_time_secs);
+        add_wrapped_fn!(fns, plat_apple::uptime_raw_secs);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_uptime_raw_secs);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_cputime_secs);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic_secs);
+        add_wrapped_fn!(fns, plat_apple::nsec_np_monotonic_raw_secs);
     }
 #[cfg(target_arch = "x86_64")]
-    add_wrapped_fn!(fns, plat_x86_64::rdtscp);
+    add_wrapped_fn!(fns, plat_x86_64::rdtscp_ticks);
 
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
     println!("{:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
