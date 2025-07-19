@@ -1,9 +1,0 @@
-               fnname    nsamples    min  50th%  95th%   mean  stddev
-               ------    --------    ---  -----  -----   ----  ------
-              instant   1,000,000   1041   1250   1542   1296     279
-      gettime_cputime   1,000,000   1000   1000   2000   1387     563
-    gettime_monotonic   1,000,000   1000   1000   2000   1223     452
-gettime_monotonic_raw   1,000,000   1041   1208   1375   1222     201
-   gettime_uptime_raw   1,000,000   1041   1250   1583   1290     286
-   mach_absolute_time   1,000,000   1041   1208   1375   1222     233
-      gettime_nsec_np   1,000,000   1041   1250   1583   1290     229
