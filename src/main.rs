@@ -271,7 +271,7 @@ where
     }
     let stddev = (sumsquares / (numsamples - 1)).isqrt();
 
-    println!("{fnname:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), stddev.separate_with_commas());
+    println!("{fnname:>38} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), stddev.separate_with_commas());
 }
 
 use thousands::Separable;
@@ -307,8 +307,8 @@ fn main() {
     add_wrapped_fn!(fns, plat_x86_64::rdtscp_ticks);
 
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
-    println!("{:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
-    println!("{:>35} {:>11} {:>7} {:>7} {:>8} {:>9} {:>10} {:>10}", "------", "--------", "---", "------", "----", "------", "---", "------");
+    println!("{:>38} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10}", "fnname", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev");
+    println!("{:>38} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10}", "------", "--------", "---", "------", "----", "------", "---", "------");
 
     for func in fns {
         let handle = thread::spawn(func);
