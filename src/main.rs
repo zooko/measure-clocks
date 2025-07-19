@@ -296,7 +296,7 @@ fn main() {
     add_wrapped_fn!(fns, monotonic_raw_secs);
 #[cfg(target_vendor = "apple")]
     {
-        add_wrapped_fn!(fns, plat_apple::m_mach_absolute_time_secs);
+        add_wrapped_fn!(fns, plat_apple::mach_absolute_time_secs);
         add_wrapped_fn!(fns, plat_apple::uptime_raw_secs);
         add_wrapped_fn!(fns, plat_apple::nsec_np_uptime_raw_secs);
         add_wrapped_fn!(fns, plat_apple::nsec_np_cputime_secs);
