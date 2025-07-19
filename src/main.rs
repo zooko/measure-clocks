@@ -186,45 +186,51 @@ pub mod plat_x86_64 {
     use crate::{dummy_func, NUM_SAMPLES};
     use core::arch::x86_64;
     use std::hint::black_box;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use std::time::Instant;
 
     pub fn rdtscp_secs() -> Vec<u128> {
+        let mut aux = 0;
+
         let (numer, denomer) = calibrate_tsc(1_000_000);
 
         let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
         let mut i = 0;
         
         while i < NUM_SAMPLES {
-            let now1 = unsafe { x86_64::__rdtscp() };
+            let now1 = unsafe { x86_64::__rdtscp(&mut aux) };
 
             black_box(dummy_func());
 
-            let now2 = unsafe { x86_64::__rdtscp() };
+            let now2 = unsafe { x86_64::__rdtscp(&mut aux) };
 
             debug_assert!(now2 > now1);
-            let ticks = now2 - now1;
-            let secs = durticks * numer / denomer;
+            let ticks = now2 as u128 - now1 as u128;
+            let secs = ticks * denomer / numer;
 
             res.push(secs);
 
             i += 1;
         }
 
-        durticks
+        res
     }
 
     /// Returns the number of tsc ticks per nanosecond, in (numer. denomer) format.
     /// Sleeps for about `caltime_nanos` nanoseconds in order to calibrate.
-    fn calibrate_tsc(caltime_nanos: u64) -> (u64, u64) {
+    fn calibrate_tsc(caltime_nanos: u64) -> (u128, u128) {
+        let mut aux = 0;
         let d = Duration::from_nanos(caltime_nanos);
         let start_instant = Instant::now();
-        let start_tsc = unsafe { x86_64::__rdtscp() };
+        let start_tsc = unsafe { x86_64::__rdtscp(&mut aux) };
         sleep(d);
-        let end_tsc = unsafe { x86_64::__rdtscp() };
+        let end_tsc = unsafe { x86_64::__rdtscp(&mut aux) };
         let elap = start_instant.elapsed();
         assert!(end_tsc > start_tsc);
         assert!(elap.as_nanos() > 0);
 
-        (end_tsc - start_tsc, elap.as_nanos())
+        ((end_tsc - start_tsc).into(), elap.as_nanos())
     }
 }
 
