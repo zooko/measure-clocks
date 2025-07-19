@@ -83,7 +83,7 @@ pub mod plat_apple {
     }
 
     pub fn nsec_np_cputime_secs() -> Vec<u128> {
-        gettime_nsec_np_clock(libc::CLOCK_PROCESS_CPUTIME_ID)
+        gettime_nsec_np_clock(libc::CLOCK_THREAD_CPUTIME_ID)
     }
 
     pub fn nsec_np_monotonic_secs() -> Vec<u128> {
