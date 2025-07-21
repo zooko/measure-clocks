@@ -5,11 +5,14 @@ import os, re, sys
 # k: fn-plus-clock, v: list of (stddev, winner?)
 d = {}
 
-for fname in os.listdir(os.path.join(".", "results")):
+# print("sys.argv[1:]: %r" % sys.argv[1:])
+
+# for fname in os.listdir(os.path.join(".", "results")):
+for fname in sys.argv[1:]:
     # print("f: %r" % fname)
     
     winning = None
-    for l in open(os.path.join(".", "results", fname), "r").readlines():
+    for l in open(fname, "r").readlines():
         l = l.strip()
         # print("l: %r" % l)
     
@@ -46,13 +49,13 @@ for (k, v) in d.items():
 
     winners = 0
     # print("--- k: %r, v: %r" % (k, v,))
-    s = format(f"{k:48s}:")
+    s = ""
     for v in lis:
-        s += format(f" {v[0]:4d}{v[1]}")
+        s += format(f" {v[0]:6d}{v[1]}")
         if v[1] == " *":
             winners += 1
 
-    s += format(f"  ...winners: {winners:3d}")
+    s = format(f"{k:48s}: #winners: {winners:3d}; ") + s
     print(s)
        
 
