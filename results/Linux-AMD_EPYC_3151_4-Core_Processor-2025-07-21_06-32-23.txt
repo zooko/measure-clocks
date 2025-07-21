@@ -1,0 +1,7 @@
+                                fnname           clock    nsamples     min  perc50     mean    perc95            max     stddev     drift
+                                ------           -----    --------     ---  ------     ----    ------            ---     ------     -----
+                    libc_gettime_clock   MONOTONIC_RAW   1,000,000   7,860   8,770    8,807     8,940         38,790        423  0.999906
+                   plat_x86_64::rdtscp            None   1,000,000   8,100   8,820    8,851     8,830         54,136        411       ---
+                    libc_gettime_clock       MONOTONIC   1,000,000   7,780   8,829    8,803     8,830        304,004      4,111  0.999859
+                               instant            None   1,000,000   7,820   8,830    8,991     8,840        229,575      4,878  0.999831
+                    libc_gettime_clock  THREAD_CPUTIME   1,000,000   8,540   9,660    9,716     9,920        184,270      1,385  0.010761
