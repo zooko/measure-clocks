@@ -1,0 +1,12 @@
+                                fnname           clock    nsamples     min  perc50     mean    perc95            max     stddev     drift
+                                ------           -----    --------     ---  ------     ----    ------            ---     ------     -----
+     plat_apple::gettime_nsec_np_clock   MONOTONIC_RAW   1,000,000   1,166   1,375    1,356     1,458        603,333        707  0.999933
+     plat_apple::gettime_nsec_np_clock       MONOTONIC   1,000,000   1,000   1,000    1,368     2,000        300,000        638  0.999596
+  plat_apple::mach_absolute_time_ticks            None   1,000,000   1,208   1,375    1,383     1,458         64,633        293       ---
+     plat_apple::gettime_nsec_np_clock      UPTIME_RAW   1,000,000   1,208   1,416    1,389     1,500         22,916         99  0.999967
+                    libc_gettime_clock       MONOTONIC   1,000,000   1,000   1,000    1,393     2,000         24,000        495  0.999644
+                               instant            None   1,000,000   1,208   1,416    1,404     1,666         21,958        128  0.999902
+                    libc_gettime_clock      UPTIME_RAW   1,000,000   1,166   1,375    1,419     1,666        297,541        543  0.999966
+                    libc_gettime_clock   MONOTONIC_RAW   1,000,000   1,166   1,458    1,489     1,709         41,750        210  0.999934
+                    libc_gettime_clock  THREAD_CPUTIME   1,000,000   1,250   1,458    1,457     1,584         19,000        133  0.009273
+     plat_apple::gettime_nsec_np_clock  THREAD_CPUTIME   1,000,000   1,250   1,500    1,482     1,584         34,958        123  0.006142
