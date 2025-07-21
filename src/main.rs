@@ -4,7 +4,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 extern crate libc;
 
-const NUM_SAMPLES: u64 = 10_000_000;
+const NUM_SAMPLES: u64 = 1_000_000;
 // const NUM_SAMPLES: u64 = 100;
 
 #[inline(never)]
