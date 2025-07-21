@@ -13,7 +13,7 @@ for fname in os.listdir(os.path.join(".", "results")):
         l = l.strip()
         # print("l: %r" % l)
     
-        mo = re.search("^ *([a-z_:]+) +?([A-Za-z_]+).+?([0-9,]+) +(---|[0-9.]+)$", l)
+        mo = re.search("^ *([a-z0-9_:]+) +?([A-Za-z_]+).+?([0-9,]+) +(---|[0-9.]+)$", l)
 
         if mo:
             # print("mo.group(1): %r, mo.group(2): %r, mo.group(3): %r" % (mo.group(1), mo.group(2), mo.group(3)))

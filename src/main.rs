@@ -250,14 +250,13 @@ fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
     
 #[cfg(target_arch = "x86_64")]
 pub mod plat_x86_64 {
-    use crate::{dummy_func, NUM_SAMPLES};
+    use crate::{ClockType, dummy_func, NUM_SAMPLES, D};
     use core::arch::x86_64;
     use std::hint::black_box;
     use std::thread::sleep;
-    use std::time::Duration;
     use std::time::Instant;
 
-    pub fn rdtscp() -> Vec<u64> {
+    pub fn rdtscp(_clock: Option<ClockType>) -> Vec<u64> {
         let mut aux = 0;
 
         let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
@@ -283,7 +282,7 @@ pub mod plat_x86_64 {
 
     /// Returns the number of tsc ticks per nanosecond, in (numer, denomer) format.
     /// Sleeps for about a second in order to calibrate.
-    fn rdtscp_calibrate() -> (u64, u64) {
+    pub fn rdtscp_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
         let mut aux = 0;
         let start_instant = Instant::now();
         let start_tsc = unsafe { x86_64::__rdtscp(&mut aux) };
@@ -416,7 +415,7 @@ fn main() {
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
     }
 #[cfg(target_arch = "x86_64")]
-    add_wrapped_fn!(fns, plat_x86_64::rdtscp, plat_x86_64::rdtscp_calibrate, true);
+    add_wrapped_fn!(fns, plat_x86_64::rdtscp, plat_x86_64::rdtscp_calibrate, None, true);
 
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
     println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "fnname", "clock", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev", "drift");
