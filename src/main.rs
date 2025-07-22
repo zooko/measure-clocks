@@ -113,6 +113,7 @@ pub mod plat_windows {
 pub mod plat_apple {
     use std::hint::black_box;
     use crate::{ClockType, NUM_SAMPLES, dummy_func, D};
+    extern crate libc;
     use libc::clockid_t;
     unsafe extern "C" {
         fn clock_gettime_nsec_np(clk_id: clockid_t) -> u64;
@@ -245,11 +246,13 @@ fn instant_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
 
 #[cfg(not(target_os = "windows"))]
 pub mod plat_unixes {
+    pub extern crate libc;
     use std::mem::MaybeUninit;
+    use crate::{ClockType, D, Instant, sleep, NUM_SAMPLES, black_box, dummy_func};
 
     /// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
     /// denomer) format. Sleeps for about a millisecond in order to calibrate.
-    fn libc_gettime_clock_calibrate(clock: Option<ClockType>) -> (u64, u64) {
+    pub fn libc_gettime_clock_calibrate(clock: Option<ClockType>) -> (u64, u64) {
 	let ct = clock.unwrap();
 
 	let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
@@ -276,9 +279,7 @@ pub mod plat_unixes {
 	(durnanos, elap.as_nanos() as u64)
     }
 
-    fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
-	extern crate libc;
-
+    pub fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
 	let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
 	let mut i = 0;
 	let ct = clock.unwrap();
@@ -472,12 +473,14 @@ fn main() {
 
 #[cfg(not(target_os = "windows"))]
     {
+        use crate::plat_unixes::{libc, libc_gettime_clock, libc_gettime_clock_calibrate};
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_THREAD_CPUTIME_ID), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
     }
 #[cfg(target_vendor = "apple")]
     {
+        use crate::plat_unixes::{libc_gettime_clock, libc_gettime_clock_calibrate, libc};
         add_wrapped_fn!(fns, plat_apple::mach_absolute_time_ticks, plat_apple::mach_absolute_time_ticks_calibrate, None, true);
         add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_UPTIME_RAW), false);
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_UPTIME_RAW), false);
