@@ -2,10 +2,12 @@
 
 use std::time::Instant;
 use rustc_hash::FxHashMap;
-extern crate libc;
 
 const NUM_SAMPLES: u64 = 1_000_000;
 // const NUM_SAMPLES: u64 = 100;
+
+const CALTIME_NANOS: u64 = 1_000_000;
+const D: Duration = Duration::from_nanos(CALTIME_NANOS);
 
 #[inline(never)]
 pub fn dummy_func() -> i64 {
@@ -42,7 +44,70 @@ fn instant(_clock: Option<ClockType>) -> Vec<u64> {
     durations
 }
 
-use std::mem::MaybeUninit;
+#[cfg(target_os = "windows")]
+pub mod plat_windows {
+    use windows_sys::Win32::System::Performance::QueryPerformanceCounter;
+    use crate::{black_box, dummy_func, Instant, sleep, ClockType, NUM_SAMPLES, D};
+    
+    pub fn qpc(_clock: Option<ClockType>) -> Vec<u64> {
+        let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
+        let mut i = 0;
+
+        while i < NUM_SAMPLES {
+	    let mut start: i64 = 0;
+	    let mut stop: i64 = 0;
+	    let start_result = unsafe { QueryPerformanceCounter(&mut start) };
+
+            black_box(dummy_func());
+
+	    let stop_result = unsafe { QueryPerformanceCounter(&mut stop) };
+
+	    assert!(start_result != 0);
+	    assert!(stop_result != 0);
+            assert!(stop > start);
+            let ticks = stop as u64 - start as u64;
+
+            res.push(ticks);
+
+            i += 1;
+        }
+
+	res
+    }
+
+    /// Returns the number of qpc ticks per nanosecond, in (numer, denomer) format.
+    /// Sleeps for about a millisecond in order to calibrate.
+    pub fn qpc_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
+	let mut start: i64 = 0;
+	let mut stop: i64 = 0;
+
+	// let mut frequency: i64 = 0;
+	// let freq_result = unsafe { QueryPerformanceFrequency(&mut frequency) };
+	// assert!(freq_result != 0);
+
+	let start_instant = Instant::now();
+	let start_result = unsafe { QueryPerformanceCounter(&mut start) };
+
+        sleep(D);
+
+	let stop_result = unsafe { QueryPerformanceCounter(&mut stop) };
+	let elap = start_instant.elapsed();
+
+	assert!(elap.as_nanos() > 0);
+	assert!(start_result != 0);
+	assert!(stop_result != 0);
+	assert!(start > 0);
+	assert!(stop > 0);
+        assert!(stop > start);
+
+	let ticks = stop as u64 - start as u64;
+	let nanos = elap.as_nanos() as u64;
+
+	// println!("QueryPerformanceFrequency said the ticks per second is {}. Our calibration says the ticks per nanosecond is {}/{}", freq_result, ticks, nanos);
+
+	(ticks, nanos)
+    }
+}
 
 #[cfg(target_vendor = "apple")]
 pub mod plat_apple {
@@ -54,7 +119,7 @@ pub mod plat_apple {
     }
 
     /// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
-    /// denomer) format. Sleeps for about a second in order to calibrate.
+    /// denomer) format. Sleeps for about a millisecond in order to calibrate.
     pub fn gettime_nsec_np_clock_calibrate(clock: Option<ClockType>) -> (u64, u64) {
         let ct = clock.unwrap();
 
@@ -100,7 +165,7 @@ pub mod plat_apple {
     use std::thread::sleep;
 
     /// Returns the number of this clock's ticks per Instant::now()'s nanoseconds, in (numer,
-    /// denomer) format. Sleeps for about a second in order to calibrate.
+    /// denomer) format. Sleeps for about a millisecond in order to calibrate.
     pub fn mach_absolute_time_ticks_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
         //let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
         //let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
@@ -154,17 +219,14 @@ pub mod plat_apple {
 #[cfg(target_vendor = "apple")]
 type ClockType = u32;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 type ClockType = i32;
 
 use std::time::Duration;
 use std::thread::sleep;
 
-const CALTIME_NANOS: u64 = 1_000_000;
-const D: Duration = Duration::from_nanos(CALTIME_NANOS);
-
 /// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
-/// denomer) format. Sleeps for about a second in order to calibrate. Note that it is using the
+/// denomer) format. Sleeps for about a millisecond in order to calibrate. Note that it is using the
 /// same clock for both of the measurements, so this is actually measuring nothing but the error in
 /// our calibration tecnnique. :-} Most of the reason we are doing this at all is the insert a 1sec
 /// delay before beginning the measurements of the clock, so that all of the measurements of clocks,
@@ -181,74 +243,79 @@ fn instant_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
     (elap2, elap1)
 }
 
-/// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
-/// denomer) format. Sleeps for about a second in order to calibrate.
-fn libc_gettime_clock_calibrate(clock: Option<ClockType>) -> (u64, u64) {
-    let ct = clock.unwrap();
+#[cfg(not(target_os = "windows"))]
+pub mod plat_unixes {
+    use std::mem::MaybeUninit;
 
-    let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
-    let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
+    /// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
+    /// denomer) format. Sleeps for about a millisecond in order to calibrate.
+    fn libc_gettime_clock_calibrate(clock: Option<ClockType>) -> (u64, u64) {
+	let ct = clock.unwrap();
 
-    let start_instant = Instant::now();
-    let retval1 = unsafe { libc::clock_gettime(ct, tp1.as_mut_ptr()) };
-    sleep(D);
-    let retval2 = unsafe { libc::clock_gettime(ct, tp2.as_mut_ptr()) };
-    let elap = start_instant.elapsed();
-    assert!(elap.as_nanos() > 0);
+	let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
+	let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
 
-    assert_eq!(retval1, 0);
-    let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
-    let instnsec = unsafe { (*tp1.as_ptr()).tv_nsec };
-    assert_eq!(retval2, 0);
-    let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
-    let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
+	let start_instant = Instant::now();
+	let retval1 = unsafe { libc::clock_gettime(ct, tp1.as_mut_ptr()) };
+	sleep(D);
+	let retval2 = unsafe { libc::clock_gettime(ct, tp2.as_mut_ptr()) };
+	let elap = start_instant.elapsed();
+	assert!(elap.as_nanos() > 0);
 
-    assert!(newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec, "newinstsec: {newinstsec}, newinstnsec: {newinstnsec}, instsec: {instsec}, instnsec: {instnsec}");
-    let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
-    assert!(durnanosi64 > 0);
-    let durnanos: u64 = durnanosi64.try_into().unwrap();
-    (durnanos, elap.as_nanos() as u64)
-}
+	assert_eq!(retval1, 0);
+	let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
+	let instnsec = unsafe { (*tp1.as_ptr()).tv_nsec };
+	assert_eq!(retval2, 0);
+	let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
+	let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
 
-fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
-    extern crate libc;
-
-    let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
-    let mut i = 0;
-    let ct = clock.unwrap();
-    
-    while i < NUM_SAMPLES {
-        let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
-        let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
-
-        let retval1 = unsafe { libc::clock_gettime(ct, tp1.as_mut_ptr()) };
-
-        black_box(dummy_func());
-
-        let retval2 = unsafe { libc::clock_gettime(ct, tp2.as_mut_ptr()) };
-
-        assert_eq!(retval1, 0);
-        let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
-        let instnsec = unsafe { (*tp1.as_ptr()).tv_nsec };
-        assert_eq!(retval2, 0);
-        let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
-        let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
-
-        assert!(newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec, "newinstsec: {newinstsec}, newinstnsec: {newinstnsec}, instsec: {instsec}, instnsec: {instnsec}");
-        let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
-        assert!(durnanosi64 > 0);
-        let durnanos: u64 = durnanosi64.try_into().unwrap();
-        assert!(durnanos > 0);
-
-        durations.push(durnanos);
-
-        i += 1;
+	assert!(newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec, "newinstsec: {newinstsec}, newinstnsec: {newinstnsec}, instsec: {instsec}, instnsec: {instnsec}");
+	let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
+	assert!(durnanosi64 > 0);
+	let durnanos: u64 = durnanosi64.try_into().unwrap();
+	(durnanos, elap.as_nanos() as u64)
     }
 
-    durations
+    fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
+	extern crate libc;
+
+	let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+	let mut i = 0;
+	let ct = clock.unwrap();
+	
+	while i < NUM_SAMPLES {
+            let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
+            let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
+
+            let retval1 = unsafe { libc::clock_gettime(ct, tp1.as_mut_ptr()) };
+
+            black_box(dummy_func());
+
+            let retval2 = unsafe { libc::clock_gettime(ct, tp2.as_mut_ptr()) };
+
+            assert_eq!(retval1, 0);
+            let instsec = unsafe { (*tp1.as_ptr()).tv_sec };
+            let instnsec = unsafe { (*tp1.as_ptr()).tv_nsec };
+            assert_eq!(retval2, 0);
+            let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
+            let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
+
+            assert!(newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec, "newinstsec: {newinstsec}, newinstnsec: {newinstnsec}, instsec: {instsec}, instnsec: {instnsec}");
+            let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
+            assert!(durnanosi64 > 0);
+            let durnanos: u64 = durnanosi64.try_into().unwrap();
+            assert!(durnanos > 0);
+
+            durations.push(durnanos);
+
+            i += 1;
+	}
+
+	durations
+    }
 }
-    
-#[cfg(target_arch = "x86_64")]
+
+#[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
 pub mod plat_x86_64 {
     use crate::{ClockType, dummy_func, NUM_SAMPLES, D};
     use core::arch::x86_64;
@@ -281,7 +348,7 @@ pub mod plat_x86_64 {
     }
 
     /// Returns the number of tsc ticks per nanosecond, in (numer, denomer) format.
-    /// Sleeps for about a second in order to calibrate.
+    /// Sleeps for about a millisecond in order to calibrate.
     pub fn rdtscp_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
         let mut aux = 0;
         let start_instant = Instant::now();
@@ -402,9 +469,13 @@ fn main() {
     let mut handles = Vec::new();
 
     add_wrapped_fn!(fns, instant, instant_calibrate, None, false);
+
+#[cfg(not(target_os = "windows"))]
+    {
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_THREAD_CPUTIME_ID), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC), false);
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
+    }
 #[cfg(target_vendor = "apple")]
     {
         add_wrapped_fn!(fns, plat_apple::mach_absolute_time_ticks, plat_apple::mach_absolute_time_ticks_calibrate, None, true);
@@ -414,8 +485,11 @@ fn main() {
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_MONOTONIC), false);
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
     }
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
     add_wrapped_fn!(fns, plat_x86_64::rdtscp, plat_x86_64::rdtscp_calibrate, None, true);
+#[cfg(target_os = "windows")]
+    add_wrapped_fn!(fns, plat_windows::qpc, plat_windows::qpc_calibrate, None, true);
+
 
 //    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
     println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "fnname", "clock", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev", "drift");

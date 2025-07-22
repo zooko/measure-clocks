@@ -9,6 +9,9 @@ edition = "2024"
 rustc-hash = "2.1.1"
 thousands = "0.2.0"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.60.2", features = ["Win32_System_Performance"] }
+
 [target.'cfg(target_vendor="apple")'.dependencies]
 mach-sys = "0.5.4"
 
