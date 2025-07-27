@@ -3,8 +3,7 @@
 use std::time::Instant;
 use rustc_hash::FxHashMap;
 
-const NUM_SAMPLES: u64 = 1_000_000;
-// const NUM_SAMPLES: u64 = 100;
+const DEFAULT_ITERS: u64 = 100_000;
 
 const CALTIME_NANOS: u64 = 1_000_000;
 const D: Duration = Duration::from_nanos(CALTIME_NANOS);
@@ -25,11 +24,11 @@ pub fn dummy_func() -> i64 {
 
 use std::sync::Arc;
 use std::hint::black_box;
-fn instant(_clock: Option<ClockType>) -> Vec<u64> {
-    let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+fn instant(_clock: Option<ClockType>, iters: u64) -> Vec<u64> {
+    let mut durations = Vec::with_capacity(iters as usize);
 
     let mut i = 0;
-    while i < NUM_SAMPLES {
+    while i < iters {
         let inst = Instant::now();
 
         black_box(dummy_func());
@@ -47,13 +46,14 @@ fn instant(_clock: Option<ClockType>) -> Vec<u64> {
 #[cfg(target_os = "windows")]
 pub mod plat_windows {
     use windows_sys::Win32::System::Performance::QueryPerformanceCounter;
-    use crate::{black_box, dummy_func, Instant, sleep, ClockType, NUM_SAMPLES, D};
+    use crate::{black_box, dummy_func, Instant, sleep, ClockType, DEFAULT_ITERS, D};
     
     pub fn qpc(_clock: Option<ClockType>) -> Vec<u64> {
-        let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
+        let iters = get_iters();
+        let mut res = Vec::with_capacity(iters);
         let mut i = 0;
 
-        while i < NUM_SAMPLES {
+        while i < iters {
 	    let mut start: i64 = 0;
 	    let mut stop: i64 = 0;
 	    let start_result = unsafe { QueryPerformanceCounter(&mut start) };
@@ -112,7 +112,7 @@ pub mod plat_windows {
 #[cfg(target_vendor = "apple")]
 pub mod plat_apple {
     use std::hint::black_box;
-    use crate::{ClockType, NUM_SAMPLES, dummy_func, D};
+    use crate::{ClockType, dummy_func, D};
     extern crate libc;
     use libc::clockid_t;
     unsafe extern "C" {
@@ -138,12 +138,12 @@ pub mod plat_apple {
         (dur, elap)
     }
 
-    pub fn gettime_nsec_np_clock(clock: Option<ClockType>) -> Vec<u64> {
-        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+    pub fn gettime_nsec_np_clock(clock: Option<ClockType>, iters: u64) -> Vec<u64> {
+        let mut durations = Vec::with_capacity(iters as usize);
         let mut i = 0;
         let ct = clock.unwrap();
     
-        while i < NUM_SAMPLES {
+        while i < iters {
             let prev = unsafe { clock_gettime_nsec_np(ct) };
 
             black_box(dummy_func());
@@ -187,7 +187,7 @@ pub mod plat_apple {
         (ticks, elap)
     }
 
-    pub fn mach_absolute_time_ticks(_clock: Option<ClockType>) -> Vec<u64> {
+    pub fn mach_absolute_time_ticks(_clock: Option<ClockType>, iters: u64) -> Vec<u64> {
         //let mut mtt1: MaybeUninit<mach_timebase_info> = MaybeUninit::uninit();
         //let retval = unsafe { mach_timebase_info(mtt1.as_mut_ptr()) };
         //assert_eq!(retval, KERN_SUCCESS);
@@ -195,10 +195,10 @@ pub mod plat_apple {
 
         //eprintln!("mach_timebase_info: {mtt2:?}");
 
-        let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+        let mut durations = Vec::with_capacity(iters as usize);
         let mut i = 0;
     
-        while i < NUM_SAMPLES {
+        while i < iters {
             let t1 = unsafe { mach_absolute_time() };
 
             black_box(dummy_func());
@@ -248,7 +248,7 @@ fn instant_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
 pub mod plat_unixes {
     pub extern crate libc;
     use std::mem::MaybeUninit;
-    use crate::{ClockType, D, Instant, sleep, NUM_SAMPLES, black_box, dummy_func};
+    use crate::{ClockType, D, Instant, sleep, black_box, dummy_func};
 
     /// Returns the number of this clock's nanoseconds per Instant::now() nanoseconds, in (numer,
     /// denomer) format. Sleeps for about a millisecond in order to calibrate.
@@ -279,12 +279,12 @@ pub mod plat_unixes {
 	(durnanos, elap.as_nanos() as u64)
     }
 
-    pub fn libc_gettime_clock(clock: Option<ClockType>) -> Vec<u64> {
-	let mut durations = Vec::with_capacity(NUM_SAMPLES as usize);
+    pub fn libc_gettime_clock(clock: Option<ClockType>, iters: u64) -> Vec<u64> {
+	let mut durations = Vec::with_capacity(iters as usize);
 	let mut i = 0;
 	let ct = clock.unwrap();
 	
-	while i < NUM_SAMPLES {
+	while i < iters {
             let mut tp1: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
             let mut tp2: MaybeUninit<libc::timespec> = MaybeUninit::uninit();
 
@@ -318,19 +318,19 @@ pub mod plat_unixes {
 
 #[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
 pub mod plat_x86_64 {
-    use crate::{ClockType, dummy_func, NUM_SAMPLES, D};
+    use crate::{ClockType, dummy_func, DEFAULT_ITERS, D};
     use core::arch::x86_64;
     use std::hint::black_box;
     use std::thread::sleep;
     use std::time::Instant;
 
-    pub fn rdtscp(_clock: Option<ClockType>) -> Vec<u64> {
+    pub fn rdtscp(_clock: Option<ClockType>, iters: u64) -> Vec<u64> {
         let mut aux = 0;
 
-        let mut res = Vec::with_capacity(NUM_SAMPLES as usize);
+        let mut res = Vec::with_capacity(iters);
         let mut i = 0;
         
-        while i < NUM_SAMPLES {
+        while i < iters {
             let now1 = unsafe { x86_64::__rdtscp(&mut aux) };
 
             black_box(dummy_func());
@@ -366,11 +366,13 @@ pub mod plat_x86_64 {
 
 fn stats<F, G>(func: F, calibrate: G, clock: Option<ClockType>, fnname: &str, clockname: &str, scale: bool)
 where
-    F: Fn(Option<ClockType>) -> Vec<u64>,
+    F: Fn(Option<ClockType>, u64) -> Vec<u64>,
     G: Fn(Option<ClockType>) -> (u64, u64),
 {
+    let iters = get_iters();
+
     let (numer, denomer) = calibrate(clock);
-    let durations = func(clock);
+    let durations = func(clock, iters);
 
     let mut map: FxHashMap<u64, u64> = FxHashMap::default();
 
@@ -425,19 +427,22 @@ where
         perc95 = *pairs[pairs.len()-1].0;
     }
 
-    let mut sumsquares = 0;
+    let mut sumsquares: f64 = 0f64;
     for (nanos, num) in pairs {
-        let diff: i64 = *nanos as i64 - mean;
-        let sqdiff: u64 = diff.pow(2).try_into().unwrap();
-        sumsquares += sqdiff * *num;
+        let f64ns: f64 = *nanos as f64;
+        let diff: f64 = f64ns - mean as f64;
+        let sqdiff: f64 = diff.powf(2f64);
+        let n: f64 = (*num) as f64;
+        sumsquares += sqdiff * n;
+//        eprintln!("xyz, sumsquares: {}, sqdiff: {}, n: {}", sumsquares as u128, sqdiff as u128, n as u128);
     }
-    let stddev = (sumsquares / (numsamples - 1)).isqrt();
+    let stddev = (sumsquares / (numsamples - 1) as f64).sqrt();
 
     if scale {
-        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), stddev.separate_with_commas(), "---");
+        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), "---");
     } else {
         let drift = numer as f64 / denomer as f64;
-        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9.6}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), stddev.separate_with_commas(), drift);
+        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9.6}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), drift);
     }
 
 }
@@ -448,7 +453,7 @@ use std::thread;
 
 macro_rules! add_wrapped_fn {
     ($vec:expr, $func:path, $calibrate:path, $clock:expr, $scale:expr) => {
-        $vec.push(|| {
+        $vec.push(move || {
             // Full stringified clock (e.g., "Some(libc::CLOCK_THREAD_CPUTIME_ID)")
             let clock_str = stringify!($clock);
 
@@ -465,6 +470,24 @@ macro_rules! add_wrapped_fn {
     };
 }
 
+fn get_iters() -> u64 {
+    let args: Vec<String> = env::args().collect();
+
+    // Iterate over the arguments to find the "--iters" argument
+    for arg in &args {
+        if let Some(iters_str) = arg.strip_prefix("--iters=") {
+            if let Ok(argiters) = iters_str.parse::<u64>() {
+                return argiters;
+            } else {
+                panic!();
+            }
+        }
+    }
+
+    DEFAULT_ITERS
+}
+
+use std::env;
 fn main() {
     let mut fns: Vec<fn()> = Vec::new();
     let mut handles = Vec::new();
@@ -494,13 +517,25 @@ fn main() {
     add_wrapped_fn!(fns, plat_windows::qpc, plat_windows::qpc_calibrate, None, true);
 
 
-//    println!("NUM_SAMPLES: {}", NUM_SAMPLES.separate_with_commas());
+//    println!("iters: {}", iters.separate_with_commas());
     println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "fnname", "clock", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev", "drift");
     println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "------", "-----", "--------", "---", "------", "----", "------", "---", "------", "-----");
 
+    let args: Vec<String> = env::args().collect();
+
+    let numthreadsperfunc = if args.contains(&"--overthread".to_string()) {
+        let count = thread::available_parallelism().unwrap().get();
+        assert!(count >= 1_usize);
+        count * 2
+    } else {
+        1
+    };
+
     for func in fns {
-        let handle = thread::spawn(func);
-        handles.push(handle);
+        for _i in 0..numthreadsperfunc {
+            let handle = thread::spawn(func);
+            handles.push(handle);
+        }
     }
 
     for handle in handles {
