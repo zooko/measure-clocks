@@ -318,7 +318,7 @@ pub mod plat_unixes {
 
 #[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
 pub mod plat_x86_64 {
-    use crate::{ClockType, dummy_func, DEFAULT_ITERS, D};
+    use crate::{ClockType, dummy_func, D};
     use core::arch::x86_64;
     use std::hint::black_box;
     use std::thread::sleep;
@@ -327,7 +327,7 @@ pub mod plat_x86_64 {
     pub fn rdtscp(_clock: Option<ClockType>, iters: u64) -> Vec<u64> {
         let mut aux = 0;
 
-        let mut res = Vec::with_capacity(iters);
+        let mut res = Vec::with_capacity(iters as usize);
         let mut i = 0;
         
         while i < iters {
