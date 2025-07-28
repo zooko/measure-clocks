@@ -269,6 +269,7 @@ fn instant_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
 #[cfg(unix)]
 pub mod plat_unixes {
     pub extern crate libc;
+    use std::io::Error;
     use std::mem::MaybeUninit;
     use crate::{ClockType, D, Instant, sleep, black_box, dummy_func};
 
@@ -355,6 +356,7 @@ pub mod plat_unixes {
         unsafe {
             if settimeofday(&tv as *const timeval, std::ptr::null::<timezone>()) != 0 {
                 eprintln!("You have to give this process super-user/admin privs for it to be able to set (jump) the system clock.");
+                eprintln!("{}", Error::last_os_error());
                 panic!();
             }
         }
