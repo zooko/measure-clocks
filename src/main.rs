@@ -43,7 +43,7 @@ fn instant(_clock: Option<ClockType>, iters: u64) -> Vec<u64> {
     durations
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub mod plat_windows {
     use windows_sys::Win32::System::Performance::QueryPerformanceCounter;
     use crate::{black_box, dummy_func, Instant, sleep, ClockType, DEFAULT_ITERS, D};
@@ -107,6 +107,27 @@ pub mod plat_windows {
 
 	(ticks, nanos)
     }
+
+    pub fn increment_system_time() -> io::Result<()> {
+        use winapi::um::sysinfoapi::{GetSystemTime, SetSystemTime};
+        use winapi::shared::minwindef::SYSTEMTIME;
+
+        // Read current time
+        let mut system_time = SYSTEMTIME { wYear: 0, wMonth: 0, wDayOfWeek: 0, wDay: 0, wHour: 0, wMinute: 0, wSecond: 0, wMilliseconds: 0 };
+        unsafe { GetSystemTime(&mut system_time); }
+
+        // Add 1 second (don't bother to handle overflow)
+        system_time.wSecond += 1;
+
+        // Set new time
+        unsafe {
+            if SetSystemTime(&system_time) != 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
 }
 
 #[cfg(target_vendor = "apple")]
@@ -150,10 +171,11 @@ pub mod plat_apple {
 
             let now = unsafe { clock_gettime_nsec_np(ct) };
 
-            assert!(now > prev);
-            let dur: u64 = now - prev;
+            if now > prev {
+                let dur: u64 = now - prev;
 
-            durations.push(dur);
+                durations.push(dur);
+            }
 
             i += 1;
         }
@@ -244,7 +266,7 @@ fn instant_calibrate(_clock: Option<ClockType>) -> (u64, u64) {
     (elap2, elap1)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(unix)]
 pub mod plat_unixes {
     pub extern crate libc;
     use std::mem::MaybeUninit;
@@ -301,22 +323,45 @@ pub mod plat_unixes {
             let newinstsec = unsafe { (*tp2.as_ptr()).tv_sec };
             let newinstnsec = unsafe { (*tp2.as_ptr()).tv_nsec };
 
-            assert!(newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec, "newinstsec: {newinstsec}, newinstnsec: {newinstnsec}, instsec: {instsec}, instnsec: {instnsec}");
-            let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
-            assert!(durnanosi64 > 0);
-            let durnanos: u64 = durnanosi64.try_into().unwrap();
-            assert!(durnanos > 0);
+            if newinstsec * 1_000_000_000 + newinstnsec > instsec * 1_000_000_000 + instnsec {
+                let durnanosi64 = (newinstsec - instsec) * 1_000_000_000 + newinstnsec - instnsec;
+                assert!(durnanosi64 > 0);
+                let durnanos: u64 = durnanosi64.try_into().unwrap();
+                assert!(durnanos > 0);
 
-            durations.push(durnanos);
+                durations.push(durnanos);
+            }
 
             i += 1;
 	}
 
 	durations
     }
+
+    pub fn increment_system_time() {
+        use libc::{gettimeofday, settimeofday, timeval, timezone};
+
+        // Read current time
+        let mut tv = timeval { tv_sec: 0, tv_usec: 0 };
+        unsafe {
+            if gettimeofday(&mut tv as *mut timeval, std::ptr::null_mut()) != 0 {
+                panic!();
+            }
+        }
+
+        tv.tv_sec += 1;
+
+        // Set new time
+        unsafe {
+            if settimeofday(&tv as *const timeval, std::ptr::null::<timezone>()) != 0 {
+                eprintln!("You have to give this process super-user/admin privs for it to be able to set (jump) the system clock.");
+                panic!();
+            }
+        }
+    }
 }
 
-#[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
+#[cfg(target_arch = "x86_64")]
 pub mod plat_x86_64 {
     use crate::{ClockType, dummy_func, D};
     use core::arch::x86_64;
@@ -362,6 +407,15 @@ pub mod plat_x86_64 {
 
         ((end_tsc - start_tsc).into(), elap.as_nanos() as u64)
     }
+}
+
+#[cfg(unix)]
+fn jump_clock_forward_1_sec() {
+    plat_unixes::increment_system_time()
+}
+#[cfg(windows)]
+fn jump_clock_forward_1_sec() {
+    plat_windows::increment_system_time()
 }
 
 fn stats<F, G>(func: F, calibrate: G, clock: Option<ClockType>, fnname: &str, clockname: &str, scale: bool)
@@ -439,10 +493,10 @@ where
     let stddev = (sumsquares / (numsamples - 1) as f64).sqrt();
 
     if scale {
-        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), "---");
+        println!("{fnname:>38} {clockname:>14} {:>12} {:>7} {:>7} {:>11} {:>7} {:>14} {:>11} {:>12}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), "---");
     } else {
         let drift = numer as f64 / denomer as f64;
-        println!("{fnname:>38} {clockname:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9.6}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), drift);
+        println!("{fnname:>38} {clockname:>14} {:>12} {:>7} {:>7} {:>11} {:>7} {:>14} {:>11} {:>12.6}", numsamples.separate_with_commas(), min.separate_with_commas(), perc50.separate_with_commas(), mean.separate_with_commas(), perc95.separate_with_commas(), max.separate_with_commas(), (stddev as u128).separate_with_commas(), drift);
     }
 
 }
@@ -487,14 +541,32 @@ fn get_iters() -> u64 {
     DEFAULT_ITERS
 }
 
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+
+fn jump_clock_ahead_thread(should_exit: Arc<AtomicBool>) {
+    // println!("Worker thread started");
+
+    // let mut iteration = 0;
+    while !should_exit.load(Ordering::Relaxed) {
+        // Do the actual work here
+        // iteration += 1;
+        // println!("Worker iteration {iteration}");
+
+        jump_clock_forward_1_sec();
+    }
+
+    // println!("Worker thread exiting gracefully");
+}
+
 use std::env;
 fn main() {
     let mut fns: Vec<fn()> = Vec::new();
-    let mut handles = Vec::new();
+    let mut clockmeasurementhandles = Vec::new();
 
     add_wrapped_fn!(fns, instant, instant_calibrate, None, false);
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(unix)]
     {
         use crate::plat_unixes::{libc, libc_gettime_clock, libc_gettime_clock_calibrate};
     add_wrapped_fn!(fns, libc_gettime_clock, libc_gettime_clock_calibrate, Some(libc::CLOCK_THREAD_CPUTIME_ID), false);
@@ -511,15 +583,15 @@ fn main() {
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_MONOTONIC), false);
         add_wrapped_fn!(fns, plat_apple::gettime_nsec_np_clock, plat_apple::gettime_nsec_np_clock_calibrate, Some(libc::CLOCK_MONOTONIC_RAW), false);
     }
-#[cfg(all(target_arch = "x86_64", not(target_os = "windows")))]
+#[cfg(target_arch = "x86_64")]
     add_wrapped_fn!(fns, plat_x86_64::rdtscp, plat_x86_64::rdtscp_calibrate, None, true);
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
     add_wrapped_fn!(fns, plat_windows::qpc, plat_windows::qpc_calibrate, None, true);
 
 
 //    println!("iters: {}", iters.separate_with_commas());
-    println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "fnname", "clock", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev", "drift");
-    println!("{:>38} {:>15} {:>11} {:>7} {:>7} {:>8} {:>9} {:>14} {:>10} {:>9}", "------", "-----", "--------", "---", "------", "----", "------", "---", "------", "-----");
+    println!("{:>38} {:>14} {:>12} {:>7} {:>7} {:>11} {:>7} {:>14} {:>11} {:>12}", "fnname", "clock", "nsamples", "min", "perc50", "mean", "perc95", "max", "stddev", "drift");
+    println!("{:>38} {:>14} {:>12} {:>7} {:>7} {:>11} {:>7} {:>14} {:>11} {:>12}", "------", "-----", "--------", "---", "------", "----", "------", "---", "------", "-----");
 
     let args: Vec<String> = env::args().collect();
 
@@ -534,11 +606,23 @@ fn main() {
     for func in fns {
         for _i in 0..numthreadsperfunc {
             let handle = thread::spawn(func);
-            handles.push(handle);
+            clockmeasurementhandles.push(handle);
         }
     }
 
-    for handle in handles {
+    let should_exit = Arc::new(AtomicBool::new(false));
+
+    if args.contains(&"--clockjumpahead".to_string()) {
+        let should_exit_clone = Arc::clone(&should_exit);
+
+        thread::spawn(|| {
+            jump_clock_ahead_thread(should_exit_clone);
+        });
+    }
+
+    for handle in clockmeasurementhandles {
         handle.join().unwrap();
     }
+
+    should_exit.store(true, Ordering::Relaxed);
 }
