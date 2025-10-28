@@ -1,5 +1,3 @@
-#![feature(rustc_private)]
-
 use std::time::Instant;
 use rustc_hash::FxHashMap;
 
