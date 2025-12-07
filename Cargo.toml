@@ -1,3 +1,4 @@
+# retired in favor of https://github.com/zooko/measure-clocks3
 # cargo-features = ["profile-rustflags"]
 
 [package]
